@@ -1,0 +1,87 @@
+version: '3.8'
+
+services:
+  sonarqube:
+    image: sonarqube:community
+    container_name: sonarqube
+    ports:
+      - "9000:9000"
+    environment:
+      - SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:9000/api/system/status"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  server-eureka:
+    build:
+      context: .
+      dockerfile: server_eureka/Dockerfile
+    container_name: server-eureka
+    ports:
+      - "8761:8761"
+    networks:
+      - microservices-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8761/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  gateway:
+    build:
+      context: .
+      dockerfile: gateway/Dockerfile
+    container_name: gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - server-eureka
+    networks:
+      - microservices-network
+    environment:
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://server-eureka:8761/eureka/
+
+  car-service:
+    build:
+      context: .
+      dockerfile: car/Dockerfile
+    container_name: car-service
+    ports:
+      - "8081:8081"
+    depends_on:
+      - server-eureka
+    networks:
+      - microservices-network
+    environment:
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://server-eureka:8761/eureka/
+
+  client-service:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    container_name: client-service
+    ports:
+      - "8082:8082"
+    depends_on:
+      - server-eureka
+    networks:
+      - microservices-network
+    environment:
+      - EUREKA_CLIENT_SERVICE_URL_DEFAULTZONE=http://server-eureka:8761/eureka/
+
+volumes:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+
+networks:
+  microservices-network:
+    driver: bridge
